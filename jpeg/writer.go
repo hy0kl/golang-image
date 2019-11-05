@@ -551,3 +551,72 @@ func Encode(w io.Writer, m image.Image, o *Options) error {
 	e.flush()
 	return e.err
 }
+
+func EncodeWithJfif(w io.Writer, m image.Image,jfif *Jfif, o *Options) error{
+	b := m.Bounds()
+	if b.Dx() >= 1<<16 || b.Dy() >= 1<<16 {
+		return errors.New("jpeg: image is too large to encode")
+	}
+	var e encoder
+	if ww, ok := w.(writer); ok {
+		e.w = ww
+	} else {
+		e.w = bufio.NewWriter(w)
+	}
+	// Clip quality to [1, 100].
+	quality := DefaultQuality
+	if o != nil {
+		quality = o.Quality
+		if quality < 1 {
+			quality = 1
+		} else if quality > 100 {
+			quality = 100
+		}
+	}
+	// Convert from a quality rating to a scaling factor.
+	var scale int
+	if quality < 50 {
+		scale = 5000 / quality
+	} else {
+		scale = 200 - quality*2
+	}
+	// Initialize the quantization tables.
+	for i := range e.quant {
+		for j := range e.quant[i] {
+			x := int(unscaledQuant[i][j])
+			x = (x*scale + 50) / 100
+			if x < 1 {
+				x = 1
+			} else if x > 255 {
+				x = 255
+			}
+			e.quant[i][j] = uint8(x)
+		}
+	}
+	// Write the Start Of Image marker.
+	e.buf[0] = 0xff
+	e.buf[1] = 0xd8
+	e.write(e.buf[:2])
+	if jfif == nil{
+		jfif = NewJfif()
+	}
+	jfBody,err := jfif.ToBytes()
+	if err!=nil{
+		return err
+	}
+	e.write(jfBody)
+	// Write the quantization tables.
+	e.writeDQT()
+	// Write the image dimensions.
+	e.writeSOF0(b.Size())
+	// Write the Huffman tables.
+	e.writeDHT()
+	// Write the image data.
+	e.writeSOS(m)
+	// Write the End Of Image marker.
+	e.buf[0] = 0xff
+	e.buf[1] = 0xd9
+	e.write(e.buf[:2])
+	e.flush()
+	return e.err
+}

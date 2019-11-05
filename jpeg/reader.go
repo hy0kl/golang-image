@@ -9,11 +9,11 @@ package jpeg
 
 import (
 	"bufio"
+	"encoding/hex"
+	"fmt"
 	"image"
 	"image/color"
 	"io"
-	"fmt"
-	"encoding/hex"
 )
 
 // TODO(nigeltao): fix up the doc comment style so that sentences start with
@@ -50,7 +50,7 @@ const (
 	nGrayComponent = 1
 	// A color JPEG image has Y, Cb and Cr components.
 	nColorComponent = 3
-	nCMYKComponent = 4
+	nCMYKComponent  = 4
 
 	// We only support 4:4:4, 4:4:0, 4:2:2 and 4:2:0 downsampling, and therefore the
 	// number of luma samples per chroma sample is at most 2 in the horizontal
@@ -77,9 +77,9 @@ const (
 )
 
 const (
-	Grayscale 	= 1
-	RGBA 		= 2
-	YCbCr 		= 3
+	Grayscale = 1
+	RGBA      = 2
+	YCbCr     = 3
 )
 
 // unzig maps from the zig-zag ordering to the natural ordering. For example,
@@ -103,23 +103,23 @@ type Reader interface {
 }
 
 type decoder struct {
-	r             Reader
-	b             bits
-	width, height int
-	img1          *image.Gray
-	img3          *image.YCbCr
-	img4          *image.RGBA
-	ri            int // Restart Interval.
-	nComp         int
-	progressive   bool
+	r              Reader
+	b              bits
+	width, height  int
+	img1           *image.Gray
+	img3           *image.YCbCr
+	img4           *image.RGBA
+	ri             int // Restart Interval.
+	nComp          int
+	progressive    bool
 	jpegColorSpace int
-	eobRun        uint16 // End-of-Band run, specified in section G.1.2.2.
-	comp          [MAX_COMPS_IN_SCAN]component
-	progCoeffs    [MAX_COMPS_IN_SCAN][]block // Saved state between progressive-mode scans.
-	huff          [maxTc + 1][maxTh + 1]huffman
-	quant         [maxTq + 1]block // Quantization tables, in zig-zag order.
-	iccProfile    [65535]byte
-	tmp           [1024]byte
+	eobRun         uint16 // End-of-Band run, specified in section G.1.2.2.
+	comp           [MAX_COMPS_IN_SCAN]component
+	progCoeffs     [MAX_COMPS_IN_SCAN][]block // Saved state between progressive-mode scans.
+	huff           [maxTc + 1][maxTh + 1]huffman
+	quant          [maxTq + 1]block // Quantization tables, in zig-zag order.
+	iccProfile     [65535]byte
+	tmp            [1024]byte
 }
 
 // Reads and ignores the next n bytes.
@@ -148,16 +148,16 @@ func (d *decoder) processSOF(n int) error {
 		return err
 	}
 
-	precision:=int(d.tmp[0])
+	precision := int(d.tmp[0])
 	d.height = int(d.tmp[1])<<8 + int(d.tmp[2])
 	d.width = int(d.tmp[3])<<8 + int(d.tmp[4])
 	d.nComp = int(d.tmp[5])
 
-	if (d.nComp * 3) != n - 6 {
+	if (d.nComp * 3) != n-6 {
 		return UnsupportedError("Bad length")
 	}
 
-	if (d.height <= 0 || d.width <= 0 || d.nComp <= 0) {
+	if d.height <= 0 || d.width <= 0 || d.nComp <= 0 {
 		return UnsupportedError("Empty image")
 	}
 
@@ -172,14 +172,14 @@ func (d *decoder) processSOF(n int) error {
 	// jdapimin.c -> default_decompress_parms -> colorspace selector
 
 	switch d.nComp {
-		case 1:
-			d.jpegColorSpace = Grayscale 
-		case 3:
-			d.jpegColorSpace = YCbCr
-		case 4:
-			d.jpegColorSpace = RGBA
-		default:
-			return UnsupportedError("Invalid number of components")
+	case 1:
+		d.jpegColorSpace = Grayscale
+	case 3:
+		d.jpegColorSpace = YCbCr
+	case 4:
+		d.jpegColorSpace = RGBA
+	default:
+		return UnsupportedError("Invalid number of components")
 	}
 
 	for i := 0; i < d.nComp; i++ {
@@ -315,16 +315,16 @@ func (d *decoder) processApp2Marker(n int) error {
 		return err
 	}
 
-	fmt.Println("Length: %d", n)
+	fmt.Println("Length: ", n)
 
-	if (string(d.tmp[0:12]) != "ICC_PROFILE֒ٚ") {
+	if string(d.tmp[0:12]) != "ICC_PROFILE֒ٚ" {
 		fmt.Println("ERR")
 	}
 
 	_, err = io.ReadFull(d.r, d.iccProfile[0:n-12])
 
 	// fmt.Println(hex.EncodeToString(d.tmp[0:]))
-	fmt.Println(hex.EncodeToString(d.iccProfile[0:n-13]))
+	fmt.Println(hex.EncodeToString(d.iccProfile[0 : n-13]))
 	// fmt.Println("bla", string(d.tmp[0:]))
 	return nil
 }
@@ -436,15 +436,15 @@ func (d *decoder) decode(r io.Reader, configOnly bool) (image.Image, error) {
 			if configOnly {
 				return nil, err
 			}
-		case marker == dhtMarker: 	// Define Huffman Table.
+		case marker == dhtMarker: // Define Huffman Table.
 			err = d.processDHT(n)
-		case marker == dqtMarker: 	// Define Quantization Table.
+		case marker == dqtMarker: // Define Quantization Table.
 			err = d.processDQT(n)
-		case marker == sosMarker: 	// Start Of Scan.
+		case marker == sosMarker: // Start Of Scan.
 			err = d.processSOS(n)
-		case marker == driMarker: 	// Define Restart Interval.
+		case marker == driMarker: // Define Restart Interval.
 			err = d.processDRI(n)
-		case marker == app2Marker: 	// Define App2
+		case marker == app2Marker: // Define App2
 			// err = d.processApp2Marker(n)
 			err = d.ignore(n)
 		case app0Marker <= marker && marker <= app15Marker || marker == comMarker: // APPlication specific, or COMment.
@@ -483,24 +483,24 @@ func DecodeConfig(r io.Reader) (image.Config, error) {
 	}
 
 	switch d.jpegColorSpace {
-		case Grayscale:
-			return image.Config{
-				ColorModel: color.GrayModel,
-				Width:      d.width,
-				Height:     d.height,
-			}, nil
-		case YCbCr:
-			return image.Config{
-				ColorModel: color.YCbCrModel,
-				Width:      d.width,
-				Height:     d.height,
-			}, nil
-		case RGBA :
-			return image.Config{
-				ColorModel: color.RGBAModel,
-				Width:      d.width,
-				Height:     d.height,
-			}, nil
+	case Grayscale:
+		return image.Config{
+			ColorModel: color.GrayModel,
+			Width:      d.width,
+			Height:     d.height,
+		}, nil
+	case YCbCr:
+		return image.Config{
+			ColorModel: color.YCbCrModel,
+			Width:      d.width,
+			Height:     d.height,
+		}, nil
+	case RGBA:
+		return image.Config{
+			ColorModel: color.RGBAModel,
+			Width:      d.width,
+			Height:     d.height,
+		}, nil
 	}
 	return image.Config{}, FormatError("missing SOF marker")
 }
