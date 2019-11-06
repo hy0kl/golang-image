@@ -6,20 +6,27 @@ package jpeg
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
+	"image"
 )
 
+const thumbnail_max_px = 21845
+
 type Jfif struct {
-	mVersion uint8
-	sVersion uint8
-	density  uint8
-	xDensity uint16
-	yDensity uint16
+	mVersion   uint8
+	sVersion   uint8
+	density    uint8
+	xDensity   uint16
+	yDensity   uint16
+	xthumbnail uint8
+	ythumbnail uint8
+	thumbnail  []byte
 }
 
 func NewJfif() *Jfif {
 	return &Jfif{mVersion: 1, sVersion: 1,
-		density: 1, xDensity: 1, yDensity: 1}
+		density: 1, xDensity: 1, yDensity: 1, thumbnail: nil}
 }
 
 func (j *Jfif) Version() string {
@@ -56,15 +63,17 @@ func (j *Jfif) ToBytes() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	var xThumnail uint8 = 0
-	var yThumnail uint8 = 0
 	// write xThumnail
-	err = buf.WriteByte(byte(xThumnail))
+	err = buf.WriteByte(byte(j.xthumbnail))
 	if err != nil {
 		return nil, err
 	}
 	// write yThumnail
-	err = buf.WriteByte(byte(yThumnail))
+	err = buf.WriteByte(byte(j.ythumbnail))
+	if err != nil {
+		return nil, err
+	}
+	_, err = buf.Write(j.thumbnail)
 	if err != nil {
 		return nil, err
 	}
@@ -73,4 +82,28 @@ func (j *Jfif) ToBytes() ([]byte, error) {
 	res = append(res, d...)
 	res = append(res, buf.Bytes()...)
 	return res, err
+}
+func (jfif *Jfif) SetThumbnail(img image.Image) error {
+	b := img.Bounds()
+	if b.Dx()*b.Dy() > thumbnail_max_px {
+		return errors.New("thumbnail should not lager than 21840px")
+	}
+	jfif.xthumbnail = uint8(b.Dx())
+	jfif.ythumbnail = uint8(b.Dy())
+	fmt.Println(jfif.xthumbnail)
+	fmt.Println(jfif.ythumbnail)
+	jfif.thumbnail = make([]byte, 3*b.Dx()*b.Dy())
+	index := 0
+	for j := 0; j < b.Dy(); j++ {
+		for i := 0; i < b.Dx(); i++ {
+			r, g, b, _ := img.At(i, j).RGBA()
+			jfif.thumbnail[index] = byte(uint8(r))
+			index++
+			jfif.thumbnail[index] = byte(uint8(g))
+			index++
+			jfif.thumbnail[index] = byte(uint8(b))
+			index++
+		}
+	}
+	return nil
 }

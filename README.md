@@ -13,4 +13,10 @@ You can wirte jfif metadata by calling:
 
     EncodeWithJfif(w io.Writer, m image.Image,jfif *Jfif, o *Options)
 
-JFIF is not complete support, such as thumbnail. But the rest is accessable.And if a nil Jfif is passed, the default value would be flush to output.
+And set the thumbnail by calling:
+
+    jfif := jpeg.NewJfif()
+    err = jfif.SetThumbnail(thumbnail)
+    checkErr(err)
+
+_Notic: The thumbnail should not be lager than 21845 px, which means width*hight <= 21845_
